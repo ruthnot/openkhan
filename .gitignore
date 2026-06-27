@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+# uv — lockfile IS tracked (this is an app, not a library) for reproducible installs
+
+# openkahn local state
+config.yaml
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+data/
+logs/
+
+# OS / editor
+.DS_Store
+*.swp

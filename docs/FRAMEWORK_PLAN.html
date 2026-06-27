@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>openkahn — Framework Plan</title>
+<style>
+  :root {
+    --fg: #1c1e21; --muted: #5b616e; --bg: #fbfbfa; --card: #ffffff;
+    --accent: #2f6f4f; --border: #e3e3e0; --code-bg: #f4f4f2; --th-bg: #f0f4f1;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --fg: #e6e6e3; --muted: #9aa0aa; --bg: #16181c; --card: #1d2024;
+      --accent: #6fbf93; --border: #2c3036; --code-bg: #23272d; --th-bg: #222b26;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    color: var(--fg); background: var(--bg); margin: 0; padding: 2.5rem 1rem;
+  }
+  main {
+    max-width: 880px; margin: 0 auto; background: var(--card);
+    border: 1px solid var(--border); border-radius: 12px; padding: 2.5rem 3rem;
+  }
+  h1 { font-size: 2rem; margin: 0 0 .25rem; line-height: 1.2; }
+  h2 {
+    font-size: 1.35rem; margin: 2.4rem 0 .8rem; padding-bottom: .35rem;
+    border-bottom: 2px solid var(--border);
+  }
+  h3 { font-size: 1.05rem; margin: 1.6rem 0 .5rem; }
+  p, li { color: var(--fg); }
+  blockquote {
+    margin: 1rem 0; padding: .6rem 1rem; border-left: 3px solid var(--accent);
+    background: var(--code-bg); color: var(--muted); border-radius: 0 6px 6px 0;
+  }
+  blockquote p { margin: .2rem 0; }
+  code {
+    font-family: "SF Mono", ui-monospace, Menlo, Consolas, monospace; font-size: .87em;
+    background: var(--code-bg); padding: .12em .4em; border-radius: 4px;
+  }
+  pre {
+    background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px;
+    padding: 1rem 1.1rem; overflow-x: auto; line-height: 1.45;
+  }
+  pre code { background: none; padding: 0; font-size: .82em; }
+  table {
+    border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: .92em;
+  }
+  th, td { border: 1px solid var(--border); padding: .55rem .7rem; text-align: left; vertical-align: top; }
+  th { background: var(--th-bg); font-weight: 600; }
+  hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+  a { color: var(--accent); }
+  ul { padding-left: 1.4rem; }
+  li { margin: .3rem 0; }
+  .phase { margin: .9rem 0; }
+  .phase strong { color: var(--accent); }
+  .tag { color: var(--muted); font-style: italic; }
+  .meta { color: var(--muted); font-size: .9rem; }
+</style>
+</head>
+<body>
+<main>
+
+<h1>openkahn — A Personal Agent Framework (openclaw × Hermes), built to learn</h1>
+<blockquote>
+  <p>Named for Daniel <strong>Kahn</strong>eman (fast/slow thinking), keeping the <code>open*</code> convention.</p>
+  <p>Package/repo: <code>openkahn</code> · CLI: <code>kahn</code></p>
+</blockquote>
+
+<h2>Context</h2>
+<p>You run <strong>openclaw</strong> on a 16GB Mac mini and like its connection layer (talk to the agent
+from Telegram). But it hangs, you can't see what it's doing, it has a documented security
+record (9 CVEs in 4 days, ~12% malware in its ClawHub skill marketplace), you don't
+understand how/whether it learns, and metered API is expensive.</p>
+
+<p>You want to <strong>build your own framework</strong> that combines:</p>
+<ul>
+  <li><strong>openclaw's</strong> strength — a messaging connection layer + gateway, and</li>
+  <li><strong>Hermes Agent's</strong> strength (Nous Research) — a <strong>self-improving loop</strong> that distills
+    successful workflows into reusable skills and refines them over time,</li>
+</ul>
+<p>while you <strong>learn how each piece works as you build it</strong>. It must run on the 16GB Mac mini
+doing basic tasks first (news brief, library-room booking — you already have working
+booking scripts in the openclaw workspace), then <strong>migrate to a 64GB Mac mini</strong> for heavier
+work (e.g. day-trade research) as a <em>config change, not a rewrite</em>.</p>
+
+<p>Goal of this doc: a phased build where every phase ships something working <strong>and</strong> teaches
+one concept. Greenfield, Python, fully local v1.</p>
+
+<hr>
+
+<h2>How openclaw and Hermes do it (so we can borrow deliberately)</h2>
+<table>
+  <thead>
+    <tr><th>Concern</th><th>openclaw</th><th>Hermes</th><th>What we take</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Transport</td>
+      <td>Pluggable channels behind a WebSocket gateway (port 18789), tightly coupled to its agent loop</td>
+      <td>Similar multi-channel gateway</td>
+      <td><strong>Our own thin Telegram transport</strong> (~200 lines, no coupling)</td>
+    </tr>
+    <tr>
+      <td>Memory</td>
+      <td>SQLite + FTS5 + <code>sqlite-vec</code> (3072-dim) RAG over markdown files</td>
+      <td>Persistent cross-session memory</td>
+      <td>SQLite + FTS5 + <code>sqlite-vec</code>, but <strong>DB-first</strong> (episodes/facts/skills as rows, not just .md)</td>
+    </tr>
+    <tr>
+      <td>Learning</td>
+      <td><strong>Manual</strong> — agent rewrites <code>MEMORY.md</code> on heartbeat. No real loop.</td>
+      <td><strong>Self-improving loop</strong>: solve → distill into reusable skill → refine</td>
+      <td><strong>Hermes-style loop</strong>, made <em>outcome-grounded</em> for a small model</td>
+    </tr>
+    <tr>
+      <td>Skills</td>
+      <td>Markdown <code>SKILL.md</code> + optional scripts; marketplace had malware</td>
+      <td>Auto-created from your workflows</td>
+      <td>Same <code>SKILL.md</code> shape, <strong>no marketplace</strong>, sandboxed, promotion-gated</td>
+    </tr>
+    <tr>
+      <td>Observability</td>
+      <td>Has a real dashboard + <code>status --deep</code> (you under-used it)</td>
+      <td>—</td>
+      <td>Our own dashboard focused on <strong>"what is it doing right now"</strong></td>
+    </tr>
+    <tr>
+      <td>Robustness</td>
+      <td>Session queue, but turns can hang with no watchdog</td>
+      <td>—</td>
+      <td><strong>Per-turn watchdog + timeouts + circuit breakers</strong></td>
+    </tr>
+  </tbody>
+</table>
+
+<hr>
+
+<h2>Architecture spine</h2>
+<pre><code>Telegram ──► Transport ──► Task Queue (DB-backed, state machine)
+                               │
+                               ▼
+                          Agent Loop ──► Brain (fast/slow) ──► System 1: qwen2.5:7b single-pass
+                               │              (pluggable)  └─► System 2: SAME 7B + scaffolding
+                               │                                  └─► [later slot] claude -p / codex exec / 64GB-local
+                               ├──► Memory (short-term summary + long-term DB, FTS+vec)
+                               ├──► Skills (retrieved, sandboxed, allowlisted)
+                               └──► Episode log ──► Reflection loop ──► candidate skills/facts
+
+   Everything observable via FastAPI dashboard (localhost, reachable over Tailscale)</code></pre>
+
+<h3>Design principles</h3>
+<ul>
+  <li><strong>Brain = an interface, not a model.</strong> <code>Brain.think(task, mode, context) -&gt; {answer, confidence, trace}</code>. Backends are swappable by config (<code>system1</code>, <code>system2</code>, <code>embeddings</code> tiers).</li>
+  <li><strong>System 2 = invocation strategy, not a bigger model.</strong> Same 7B, more test-time compute (decompose → ground → self-consistency vote → tool-verify → confidence). Speed-not-a-problem is what makes this viable.</li>
+  <li><strong>Get smarter via skills + memory, not model size.</strong> A fixed 7B improves because procedural memory accumulates and context is grounded.</li>
+  <li><strong>Outcome-grounded learning.</strong> Reflection keys on real outcomes (booking succeeded? user corrected me?), not self-critique — critical for a 7B.</li>
+  <li><strong>Security in code, not just in the prompt.</strong> Capability manifests, allowlists, confirmation gates enforced by the runtime.</li>
+  <li><strong>Portable &amp; config-driven.</strong> 16→64 migration = copy dir + DB file, edit which model each tier points to.</li>
+</ul>
+
+<hr>
+
+<h2>Tech stack</h2>
+<ul>
+  <li><strong>Python 3.12</strong>, <code>uv</code> for env/deps</li>
+  <li><strong>FastAPI + Uvicorn</strong> — gateway webhook, dashboard API/UI</li>
+  <li><strong>SQLite</strong> + <code>sqlite-vec</code> + FTS5 (via <code>apsw</code>), schema modeled with <strong>SQLModel</strong> (Postgres-ready later)</li>
+  <li><strong>ollama</strong> Python client for local models; <code>httpx</code> for transport/CLI escalation</li>
+  <li><strong>Embeddings</strong>: <code>nomic-embed-text</code> via ollama (small RAM) — keeps 16GB headroom</li>
+  <li><strong>Scheduler</strong>: APScheduler (cron + heartbeat)</li>
+  <li><strong>Telegram</strong>: raw Bot API long-poll via <code>httpx</code> (thin, no heavy SDK)</li>
+  <li><strong>Skill sandbox</strong>: <code>subprocess</code> with restricted env, timeouts, declared-capabilities only</li>
+  <li><strong>pydantic</strong> everywhere for structured LLM output + validation (catches 7B malformed output)</li>
+  <li>Dashboard UI: server-rendered + <strong>HTMX</strong> (no build step; trivial on a mini)</li>
+</ul>
+
+<hr>
+
+<h2>Repo layout</h2>
+<pre><code>openkahn/
+  config.yaml            # model tiers, allowlists, telegram token, budgets
+  openkahn/
+    transport/telegram.py    # long-poll in, send out
+    gateway/app.py           # FastAPI: webhook + dashboard API
+    queue/tasks.py           # DB-backed task state machine + watchdog
+    brain/
+      interface.py           # Brain.think(...)
+      backends/ollama.py     # local 7B (system1 + system2)
+      backends/cli.py        # claude -p / codex exec  (later)
+      scaffold.py            # decompose / self-consistency / verify / confidence
+    memory/
+      store.py               # SQLite + sqlite-vec + FTS5
+      retrieval.py           # hybrid search + context assembly
+      summary.py             # short-term rolling summary (compaction)
+    skills/
+      runtime.py             # load, retrieve, sandbox-execute
+      builtin/               # news_brief, library_booking (ported from your sjpl-*.js)
+    learning/
+      reflect.py             # outcome-grounded reflection → candidates
+      promote.py             # candidate → trusted gate
+    security/policy.py       # capability manifests, allowlist, confirmation gates
+    dashboard/               # HTMX templates + live "current step" view
+    db/schema.py             # SQLModel tables
+  tests/</code></pre>
+
+<h2>Data model (SQLite)</h2>
+<ul>
+  <li><code>episodes</code> — one per task: goal, channel/peer, plan, tool_calls(json), outcome, user_feedback, confidence, tokens, timing</li>
+  <li><code>messages</code> — raw transcript rows (long-term raw memory)</li>
+  <li><code>facts</code> — durable atomic memories (text, embedding, source episode, confidence)</li>
+  <li><code>skills</code> — name, description, body(md), script_path, capabilities(json), status(candidate|trusted), success/fail counts, embedding</li>
+  <li><code>tasks</code> — queue rows: state(queued|running|done|failed|timeout), heartbeat_ts (watchdog)</li>
+  <li><code>summaries</code> — short-term rolling summaries per session</li>
+  <li>vec/FTS virtual tables over <code>facts</code>, <code>messages</code>, <code>skills</code></li>
+</ul>
+
+<hr>
+
+<h2>Phased roadmap (each phase = working increment + one concept)</h2>
+
+<p class="phase"><strong>Phase 0 — Skeleton.</strong> Repo, <code>config.yaml</code>, DB schema, Telegram echo bot, FastAPI dashboard
+showing "hello + task queue (empty)". <span class="tag">Learn: the message→queue→reply loop and transport.</span></p>
+
+<p class="phase"><strong>Phase 1 — Single-brain agent.</strong> <code>qwen2.5:7b</code> answers messages with structured tool-calling;
+every turn logged as an <code>episode</code>; dashboard shows the <strong>live current step</strong>. <span class="tag">Learn: agent
+loop + observability (kills the "can't see what it's doing" pain immediately).</span></p>
+
+<p class="phase"><strong>Phase 2 — Memory.</strong> SQLite FTS+vec; ingest messages/facts; short-term rolling summary +
+long-term hybrid retrieval; per-turn context assembly. <span class="tag">Learn: RAG, short vs long term.</span></p>
+
+<p class="phase"><strong>Phase 3 — Fast/slow brain.</strong> <code>Brain</code> interface; System 1 router decides "is this hard?";
+System 2 = same 7B with <code>scaffold.py</code> (decompose → ground → self-consistency vote →
+tool-verify → confidence score). <span class="tag">Learn: test-time compute; why scaffolding &gt; raw model.</span></p>
+
+<p class="phase"><strong>Phase 4 — Skills + security.</strong> <code>SKILL.md</code> format, embedding retrieval, subprocess sandbox,
+capability manifests + allowlist + confirmation gates. Port your existing <strong>library booking</strong>
+(<code>sjpl-*.js</code>) and <strong>news brief</strong> as the first two skills. <span class="tag">Learn: procedural memory + a real
+security model (the openclaw CVE lesson).</span></p>
+
+<p class="phase"><strong>Phase 5 — Learning loop (the Hermes piece).</strong> Outcome-grounded <code>reflect.py</code>: review episodes
+where outcome=success or user-corrected → propose candidate skills/facts → <code>promote.py</code> gate
+(N successful uses or your approval before "trusted"). Runs on heartbeat. <span class="tag">Learn: how an agent
+actually evolves — and why it's safe.</span></p>
+
+<p class="phase"><strong>Phase 6 — Robustness + escalation.</strong> Per-turn watchdog (timeout → kill, log, notify, don't
+block queue), retries, circuit breakers; confidence-gated <strong>escalation slot</strong> wired to a
+subscription CLI (<code>claude -p</code> / <code>codex exec</code>) or held for the 64GB box. <span class="tag">Learn: reliability +
+graceful degradation (kills the "stuck forever" pain).</span></p>
+
+<p class="phase"><strong>Phase 7 — 64GB migration.</strong> Copy project dir + DB; edit <code>config.yaml</code> to point <code>system2</code> at
+a local 32–70B Q4 model; add heavier skills (day-trade research). <span class="tag">Learn: migration as config.</span></p>
+
+<hr>
+
+<h2>Security model (explicit, because of openclaw's record)</h2>
+<ul>
+  <li><strong>No skill marketplace.</strong> Skills are local, authored or self-distilled, and start as <code>candidate</code>.</li>
+  <li><strong>Capability manifest</strong> per skill (declares tools/network/files). Anything undeclared is blocked at runtime.</li>
+  <li><strong>Subprocess sandbox</strong>: restricted env vars, no network unless declared, hard timeout.</li>
+  <li><strong>Confirmation gates</strong> for external/irreversible actions (send email, confirm booking) — enforced in <code>security/policy.py</code>, not just asked for in a prompt.</li>
+  <li><strong>Telegram peer allowlist</strong> (pairing), loopback-bound gateway, Tailscale for remote dashboard access (no public exposure).</li>
+</ul>
+
+<hr>
+
+<h2>Verification (per phase, end-to-end)</h2>
+<ul>
+  <li><strong>P0</strong>: send Telegram msg → see echo; open <code>http://&lt;tailscale&gt;/</code> → dashboard loads, queue visible.</li>
+  <li><strong>P1</strong>: ask a question → reply arrives; dashboard shows the live step; <code>select * from episodes</code> has a row.</li>
+  <li><strong>P2</strong>: tell it a fact, ask later in a new session → it recalls via retrieval; inspect <code>facts</code>/vec query.</li>
+  <li><strong>P3</strong>: give a multi-step task → dashboard shows decomposition + self-consistency samples + a confidence score.</li>
+  <li><strong>P4</strong>: run news-brief and a library-booking dry-run; attempt an undeclared action → blocked; external action → asks to confirm.</li>
+  <li><strong>P5</strong>: complete a novel workflow twice → a <code>candidate</code> skill appears; approve it → becomes <code>trusted</code> and is reused.</li>
+  <li><strong>P6</strong>: force a hang (sleep in a skill) → watchdog kills it, logs timeout, notifies you, queue keeps moving.</li>
+  <li><strong>P7</strong>: on 64GB, flip <code>system2</code> to a local big model → same tasks pass with higher confidence; no code change.</li>
+</ul>
+
+<hr>
+
+<h2>Open knobs (decide as we go, not blocking)</h2>
+<ul>
+  <li>Exact System-1 vs System-2 routing threshold (start simple: keyword/length heuristic + a System-1 "is this hard?" classifier).</li>
+  <li>Self-consistency sample count (start 3).</li>
+  <li>Heartbeat cadence for reflection (start hourly, active-hours only).</li>
+  <li>When to introduce the subscription CLI escalation (Phase 6, only if 7B confidence is too often low).</li>
+</ul>
+
+<p class="meta">Source: <code>docs/FRAMEWORK_PLAN.md</code> · rendered for browser review.</p>
+
+</main>
+</body>
+</html>

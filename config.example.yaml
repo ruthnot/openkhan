@@ -1,0 +1,9 @@
+# Copy to config.yaml to override defaults.
+# Everything here is optional — openkahn runs on these defaults even with no config.yaml.
+
+think:
+  # Any model from `ollama list`. Default is qwen3:8b — its native thinking mode
+  # maps onto our fast/slow design (System 1 = /no_think, System 2 = thinking).
+  model: qwen3:8b                # 16GB box. On the 64GB box: qwen3:30b-a3b (MoE)
+  host: http://localhost:11434   # local ollama daemon
+  temperature: 0.7
