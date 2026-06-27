@@ -17,7 +17,10 @@ DEFAULTS: dict = {
         "model": "qwen3:8b",
         "host": "http://localhost:11434",
         "temperature": 0.7,
-    }
+    },
+    "memory": {
+        "db": "data/openkahn.db",
+    },
 }
 
 
@@ -29,8 +32,14 @@ class ThinkConfig:
 
 
 @dataclass
+class MemoryConfig:
+    db: str
+
+
+@dataclass
 class Config:
     think: ThinkConfig
+    memory: MemoryConfig
 
 
 def load(path: str | Path = "config.yaml") -> Config:
@@ -41,4 +50,8 @@ def load(path: str | Path = "config.yaml") -> Config:
         for section, values in user.items():
             data.setdefault(section, {}).update(values or {})
     t = data["think"]
-    return Config(think=ThinkConfig(model=t["model"], host=t["host"], temperature=t["temperature"]))
+    m = data["memory"]
+    return Config(
+        think=ThinkConfig(model=t["model"], host=t["host"], temperature=t["temperature"]),
+        memory=MemoryConfig(db=m["db"]),
+    )

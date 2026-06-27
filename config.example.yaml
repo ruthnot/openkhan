@@ -7,3 +7,6 @@ think:
   model: qwen3:8b                # 16GB box. On the 64GB box: qwen3:30b-a3b (MoE)
   host: http://localhost:11434   # local ollama daemon
   temperature: 0.7
+
+memory:
+  db: data/openkahn.db           # SQLite file holding the observation stream (tier 1)

@@ -185,6 +185,14 @@ Building slowly, smallest working slice first, adding one layer/plane at a time.
   Control yields chunks; the CLI just renders them. The felt-latency floor pads instant
   replies but never delays slow ones (measured from message arrival). No memory yet.
   Run: `uv run kahn` or `uv run kahn --once "…"`.
+- **[done] Memory tier 1 — observations (the stream).** Append-only SQLite diary
+  (`memory/observations.py` + `db/connection.py`): each turn records `user_msg`,
+  `reflex`/`agent_msg` (meta: tier/model/latency_ms), and `system` start/end —
+  timestamped, bucketed by local day/hour. Interact owns recording (session/turn ids);
+  Think yields tagged `Chunk`s; the filler isn't recorded. Read API: `recent/session/day`.
+  Generative-Agents memory-stream shape, MemGPT-recall style. **Records, doesn't yet
+  *remember*** — reading-into-context is the next tier. DB at `data/openkahn.db`.
+
 - **[next] Interact: Chainlit channel** over localhost + Tailscale, so the same Think layer
   is reachable from the laptop browser. (CLI stays as the dev channel.)
 - then: Memory → Think System 2 (scaffold) + router → Skills + Security → Reflect → robustness.
