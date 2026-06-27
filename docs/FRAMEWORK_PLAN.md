@@ -193,6 +193,11 @@ Building slowly, smallest working slice first, adding one layer/plane at a time.
   Generative-Agents memory-stream shape, MemGPT-recall style. **Records, doesn't yet
   *remember*** — reading-into-context is the next tier. DB at `data/openkahn.db`.
 
+- **[done] Observability (plane) — `kahn log`.** Read-only viewer (`observability/logview.py`)
+  over the observation stream: `kahn log` shows the latest N (default `--limit 30`),
+  oldest-first, with day headers, local time, you→/kahn← gutter, and tier/latency tags.
+  Never touches the model — first piece of the "what is it doing" answer.
+
 - **[next] Interact: Chainlit channel** over localhost + Tailscale, so the same Think layer
   is reachable from the laptop browser. (CLI stays as the dev channel.)
 - then: Memory → Think System 2 (scaffold) + router → Skills + Security → Reflect → robustness.

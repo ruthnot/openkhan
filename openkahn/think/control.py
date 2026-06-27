@@ -14,8 +14,8 @@ the floor), so real turns lose nothing. The filler ack stays instant on purpose.
 
 Control yields **Chunk** objects (text + kind + meta) rather than bare strings, so
 the Interact layer can both render them and record them as observations with the
-right kind/metadata. The filler chunk is marked record=False — ephemeral UX, not a
-memory.
+right kind/metadata. Everything is recorded — including the filler ack (kind
+'filler') — so the stream is complete; later tiers can ignore fillers by kind.
 """
 from __future__ import annotations
 
@@ -62,7 +62,7 @@ class Control:
             yield Chunk(canned, "reflex", {"tier": "faster"})
             return
 
-        yield Chunk(faster.filler(), "filler", record=False)  # instant ack, not a memory
+        yield Chunk(faster.filler(), "filler")            # instant ack — now recorded too
         started = time.monotonic()
         answer = self._brain.think(message, mode="fast")      # System 1 — /no_think
         latency_ms = int((time.monotonic() - started) * 1000)
