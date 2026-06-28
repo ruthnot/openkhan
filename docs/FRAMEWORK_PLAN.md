@@ -249,6 +249,19 @@ Building slowly, smallest working slice first, adding one layer/plane at a time.
   just pre-answer noise, so a turn now yields exactly one `agent_msg` chunk. `faster.py` is
   kept as a re-enableable fallback but is no longer imported anywhere.
 
+- **[done] Tool use (web search) in chat + streaming.** First tool-augmented turn. Before
+  answering, Control runs a **fast-mode router** (`brain.complete`, `ROUTER_SYSTEM` →
+  "SEARCH: <query>" | "NO") to decide if the turn needs live info; if so it calls the injected
+  **Search** capability and folds results into a synthesis prompt answered in **fast mode**
+  (grounded, names a source). Search is *injected* into Control (a `Searcher` protocol), so
+  Think stays decoupled from Interact. Replies now **stream**: `Brain.stream()` yields token
+  deltas (`ollama stream=True`); Control emits `kind="delta"` render-only chunks plus a final
+  `agent_msg` (full text, recorded + stored in history); the CLI prints deltas live. A
+  `kind="search"` status chunk ("🔍 searching: …") shows the tool firing and is logged.
+  *Trade-off: the router is an extra LLM call on every turn (~adds latency even when no search
+  is needed); fine for testing — later options are a cheap heuristic prefilter or native
+  tool-calling in one round-trip. Slow/System-2 synthesis is deliberately not wired yet.*
+
 - **[next] Interact: Chainlit channel** over localhost + Tailscale, so the same Think layer
   is reachable from the laptop browser. (CLI stays as the dev channel.)
 - then: Memory → Think System 2 (scaffold) + router → Skills + Security → Reflect → robustness.

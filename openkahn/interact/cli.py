@@ -12,6 +12,7 @@ at the I/O edge, where every message in and every reply out is visible.
 from __future__ import annotations
 
 import itertools
+import sys
 from datetime import datetime
 
 from openkahn.interact.chat import Chat
@@ -39,36 +40,55 @@ class CLI:
         self._obs.record(kind="system", actor="system", content="session ended",
                          session_id=session_id, channel="cli")
 
-    def _turn(self, chat: Chat, session_id: str, turn_id: str, message: str, render) -> None:
-        """Record the user msg, then stream + record each reply chunk.
+    def _turn(self, chat: Chat, session_id: str, turn_id: str, message: str, *, live: bool) -> str:
+        """Record the user msg, then render + record the reply. Streams token deltas
+        inline when `live`; otherwise accumulates the answer and returns it.
 
         `chat` carries the conversation context across turns within a session.
         """
         self._obs.record(kind="user_msg", actor="user", content=message,
                          session_id=session_id, channel="cli", turn_id=turn_id)
+        buf: list[str] = []
+        streaming = False                       # mid-stream on the current line?
         for chunk in chat.respond(message):
-            render(chunk.text)
-            if chunk.record:
+            if chunk.kind == "delta":           # per-token answer text (render-only)
+                if live:
+                    if not streaming:
+                        sys.stdout.write(AGENT_PREFIX)
+                        streaming = True
+                    sys.stdout.write(chunk.text)
+                    sys.stdout.flush()
+                else:
+                    buf.append(chunk.text)
+            elif chunk.render and chunk.text:   # a status line, e.g. the search notice
+                if streaming:
+                    sys.stdout.write("\n")
+                    streaming = False
+                if live:
+                    print(f"{AGENT_PREFIX}{chunk.text}")
+            if chunk.record:                    # final agent_msg (full text) + status
                 self._obs.record(kind=chunk.kind, actor="agent", content=chunk.text,
                                  session_id=session_id, channel="cli", turn_id=turn_id,
                                  **chunk.meta)
+        if streaming:
+            sys.stdout.write("\n")
+        return "".join(buf)
 
     def run_once(self, message: str) -> str:
-        """One message in, all reply chunks out — handy for smoke tests and scripts."""
+        """One message in, the reply out — handy for smoke tests and scripts."""
         session_id = self._new_session()
         self._start(session_id)
         chat = Chat(self._control)              # single-turn session: history of one
-        lines: list[str] = []
-        self._turn(chat, session_id, f"{session_id}-t1", message, lines.append)
+        answer = self._turn(chat, session_id, f"{session_id}-t1", message, live=False)
         self._end(session_id)
-        return "\n".join(f"{AGENT_PREFIX}{line}" for line in lines)
+        return f"{AGENT_PREFIX}{answer}"
 
     def repl(self) -> None:
         """Interactive read-eval-print loop. Ctrl-D or 'exit' to quit."""
         session_id = self._new_session()
         self._start(session_id)
         chat = Chat(self._control)              # one conversation for the whole session
-        print("openkahn — fast-think with context, logging observations (v0). Ctrl-D or 'exit' to quit.\n")
+        print("openkahn — fast-think with context + web search, streaming. Ctrl-D or 'exit' to quit.\n")
         turns = itertools.count(1)
         while True:
             try:
@@ -84,5 +104,5 @@ class CLI:
                 print("bye.")
                 return
             turn_id = f"{session_id}-t{next(turns)}"
-            self._turn(chat, session_id, turn_id, message, lambda t: print(f"{AGENT_PREFIX}{t}"))
+            self._turn(chat, session_id, turn_id, message, live=True)
             print()

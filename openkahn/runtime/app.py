@@ -28,6 +28,7 @@ import argparse
 
 from openkahn.db.connection import connect
 from openkahn.interact.cli import CLI
+from openkahn.interact.search import Search
 from openkahn.memory.observations import Observations
 from openkahn.observability import logview
 from openkahn.runtime import daemon
@@ -109,7 +110,7 @@ def main() -> None:
             host=cfg.think.host,
             temperature=cfg.think.temperature,
         )
-        cli = CLI(Control(brain), observations)
+        cli = CLI(Control(brain, search=Search()), observations)
         if args.once:
             print(cli.run_once(args.once))
         else:

@@ -17,6 +17,7 @@ self-consistency / tool-verify) comes later.
 """
 from __future__ import annotations
 
+from collections.abc import Iterator
 from typing import Literal, Protocol
 
 import ollama
@@ -51,6 +52,15 @@ class Brain(Protocol):
 
     def think(self, history: list[dict], mode: Mode = "fast") -> str: ...
 
+    def stream(self, history: list[dict], mode: Mode = "fast") -> Iterator[str]:
+        """Same as think, but yields the reply in text deltas as they arrive."""
+        ...
+
+    def complete(self, system: str, user: str, max_tokens: int | None = None) -> str:
+        """A one-shot completion with a caller-supplied system prompt (no persona,
+        thinking off). For quick control decisions like routing, not chat replies."""
+        ...
+
 
 class OllamaBrain:
     """Local ollama backend. `mode` sets thinking, persona, and output cap together."""
@@ -65,16 +75,53 @@ class OllamaBrain:
         self.temperature = temperature
         self._client = ollama.Client(host=host)
 
-    def think(self, history: list[dict], mode: Mode = "fast") -> str:
-        system = FAST_SYSTEM if mode == "fast" else SLOW_SYSTEM
+    # --- shared request shaping ---------------------------------------------
+
+    @staticmethod
+    def _system(mode: Mode) -> str:
+        return FAST_SYSTEM if mode == "fast" else SLOW_SYSTEM
+
+    def _options(self, mode: Mode) -> dict:
         options = {"temperature": self.temperature}
         if mode == "fast":
             options["num_predict"] = FAST_NUM_PREDICT  # brevity backstop (also caps latency)
+        return options
+
+    def _messages(self, mode: Mode, history: list[dict]) -> list[dict]:
+        # persona first, then the full conversation so far (the model is stateless)
+        return [{"role": "system", "content": self._system(mode)}, *history]
+
+    # --- generation ----------------------------------------------------------
+
+    def think(self, history: list[dict], mode: Mode = "fast") -> str:
         resp = self._client.chat(
             model=self.model,
-            # persona first, then the full conversation so far (model is stateless)
-            messages=[{"role": "system", "content": system}, *history],
+            messages=self._messages(mode, history),
             think=(mode == "slow"),  # fast = thinking off (System 1); slow = on (System 2)
+            options=self._options(mode),
+        )
+        return resp.message.content
+
+    def stream(self, history: list[dict], mode: Mode = "fast") -> Iterator[str]:
+        for part in self._client.chat(
+            model=self.model,
+            messages=self._messages(mode, history),
+            think=(mode == "slow"),
+            options=self._options(mode),
+            stream=True,
+        ):
+            text = part.message.content
+            if text:
+                yield text
+
+    def complete(self, system: str, user: str, max_tokens: int | None = None) -> str:
+        options = {"temperature": self.temperature}
+        if max_tokens is not None:
+            options["num_predict"] = max_tokens
+        resp = self._client.chat(
+            model=self.model,
+            messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
+            think=False,
             options=options,
         )
         return resp.message.content
