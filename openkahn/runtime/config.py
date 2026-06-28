@@ -21,6 +21,11 @@ DEFAULTS: dict = {
     "memory": {
         "db": "data/openkahn.db",
     },
+    "control": {
+        "poll_interval_seconds": 1.0,   # how often the worker checks the job queue
+        "pid_file": "data/kahnd.pid",   # daemon liveness handle (start/stop/restart)
+        "log_file": "data/kahnd.log",   # daemon stdout/stderr sink
+    },
 }
 
 
@@ -37,9 +42,17 @@ class MemoryConfig:
 
 
 @dataclass
+class ControlConfig:
+    poll_interval_seconds: float
+    pid_file: str
+    log_file: str
+
+
+@dataclass
 class Config:
     think: ThinkConfig
     memory: MemoryConfig
+    control: ControlConfig
 
 
 def load(path: str | Path = "config.yaml") -> Config:
@@ -51,7 +64,13 @@ def load(path: str | Path = "config.yaml") -> Config:
             data.setdefault(section, {}).update(values or {})
     t = data["think"]
     m = data["memory"]
+    c = data["control"]
     return Config(
         think=ThinkConfig(model=t["model"], host=t["host"], temperature=t["temperature"]),
         memory=MemoryConfig(db=m["db"]),
+        control=ControlConfig(
+            poll_interval_seconds=c["poll_interval_seconds"],
+            pid_file=c["pid_file"],
+            log_file=c["log_file"],
+        ),
     )

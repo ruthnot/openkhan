@@ -1,9 +1,14 @@
-"""Plumbing — the SQLite connection + schema bootstrap for the Memory layer.
+"""Plumbing — the SQLite connection + schema bootstrap.
 
-One database file holds every memory tier as it comes online. Today there's a
-single table: `observations` (tier 1, the raw memory stream). The schema uses
-`IF NOT EXISTS`, so opening an existing DB is a no-op and future tiers just add
-their own `CREATE TABLE` lines here.
+One database file holds every layer's tables as they come online:
+  - `observations` — Memory tier 1, the raw append-only memory stream.
+  - `jobs`         — Control plane, the work queue the kahnd daemon drains.
+
+The schema uses `IF NOT EXISTS`, so opening an existing DB is a no-op and future
+tiers just add their own `CREATE TABLE` lines here. The DB has two writers (the
+`kahn chat` session and the `kahnd` daemon, separate processes), so we run in WAL
+mode with a busy_timeout — readers never block the writer, and a writer that finds
+the file briefly locked waits instead of erroring.
 """
 from __future__ import annotations
 
@@ -27,16 +32,31 @@ CREATE TABLE IF NOT EXISTS observations (
 CREATE INDEX IF NOT EXISTS idx_obs_ts      ON observations(ts);
 CREATE INDEX IF NOT EXISTS idx_obs_day     ON observations(day);
 CREATE INDEX IF NOT EXISTS idx_obs_session ON observations(session_id);
+
+CREATE TABLE IF NOT EXISTS jobs (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,  -- queue position = order enqueued
+  kind        TEXT    NOT NULL,                   -- 'echo' (later 'research', ...)
+  params      TEXT,                               -- JSON: kind-specific inputs
+  requester   TEXT,                               -- JSON: {channel, peer} — where to deliver
+  state       TEXT    NOT NULL,                   -- 'queued'|'running'|'done'|'failed'
+  result      TEXT,                               -- JSON: handler output (when done)
+  error       TEXT,                               -- failure message (when failed)
+  created_at  TEXT    NOT NULL,                   -- UTC ISO8601 enqueued
+  started_at  TEXT,                               -- UTC ISO8601 claimed by worker
+  finished_at TEXT                                -- UTC ISO8601 done/failed
+);
+CREATE INDEX IF NOT EXISTS idx_jobs_state ON jobs(state, id);
 """
 
 
 def connect(db_path: str | Path) -> sqlite3.Connection:
-    """Open (creating if needed) the Memory database and ensure the schema exists."""
+    """Open (creating if needed) the database and ensure the schema exists."""
     path = Path(db_path)
     path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(path, check_same_thread=False)
     conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL;")  # append-friendly: readers don't block the writer
+    conn.execute("PRAGMA journal_mode=WAL;")    # readers don't block the writer
+    conn.execute("PRAGMA busy_timeout=5000;")   # two writers (chat + daemon): wait, don't error
     conn.executescript(SCHEMA)
     conn.commit()
     return conn

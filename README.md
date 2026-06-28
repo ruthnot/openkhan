@@ -30,10 +30,20 @@ Python 3.12 · `uv` · FastAPI · SQLite + `sqlite-vec` + FTS5 · ollama (`qwen2
 
 ## Getting started
 
-Phase 0 is not built yet. Once it is:
-
 ```sh
 uv sync
-cp config.example.yaml config.yaml   # add your Telegram token
-uv run kahn
+cp config.example.yaml config.yaml   # optional — sane defaults work out of the box
+```
+
+openkahn runs as an **always-live daemon** (`kahnd`). A chat is just one session
+that connects to it; you can leave the chat while the agent keeps running.
+
+```sh
+uv run kahn start      # start the always-live daemon (drains the job queue)
+uv run kahn chat       # open an interactive session (exit anytime; daemon stays up)
+uv run kahn submit --text "hello"   # enqueue a job for the daemon to run
+uv run kahn status     # is the daemon up? how many jobs queued?
+uv run kahn log        # read the observation stream (chat + daemon, one timeline)
+uv run kahn restart    # restart the daemon
+uv run kahn stop       # stop the daemon (the only thing that ends the agent)
 ```
