@@ -24,17 +24,26 @@ import ollama
 
 Mode = Literal["fast", "slow"]
 
+# Shared capability note so the model knows what it can actually do. Search is run
+# FOR the model by the system (Control's router), not called by the model — but from
+# the user's view kahn can look things up, so it must never deny having web access.
+CAN_SEARCH = (
+    "You can search the web: when a question needs current or specific facts, the "
+    "system runs a search automatically and gives you results to answer from. So "
+    "never say you can't look things up. If asked to search but not told what, ask "
+    "what to look up."
+)
 # System-1: fast, intuitive, brief. Lead with the answer; no ceremony.
 FAST_SYSTEM = (
     "You are kahn, replying on reflex (System 1): fast, intuitive, and brief. "
     "Answer in 1-3 short sentences. Lead with the answer — no preamble, no lists, "
-    "no headings. If the question truly needs depth, give the gist in one line and "
-    "offer to expand."
+    "no headings. " + CAN_SEARCH + " If the question truly needs depth, give the "
+    "gist in one line and offer to expand."
 )
 # System-2: deliberate, thorough, structured.
 SLOW_SYSTEM = (
     "You are kahn, thinking carefully (System 2). Reason the problem through, then "
-    "give a thorough, well-structured answer."
+    "give a thorough, well-structured answer. " + CAN_SEARCH
 )
 # Backstop output cap for fast replies: keeps System-1 brief even if it ignores the
 # persona, and bounds worst-case latency. Generous enough not to clip 1-3 sentences.
