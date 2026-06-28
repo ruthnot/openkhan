@@ -9,15 +9,17 @@ chunks. Tiers today:
   fast   (System 1)  brain.think()    — one /no_think single pass (the default)
   slow   (System 2)  brain.think()    — thinking on; implemented, not routed yet
 
-Pacing: every *substantive* reply is held to a minimum felt-latency floor (~1-1.5s),
-measured from message arrival. This pads instant reflexes up to a human beat but
-never delays a reply that already took longer (the model's own latency sails past
-the floor), so real turns lose nothing. The filler ack stays instant on purpose.
+Pacing: every reply is held to a minimum felt-latency floor (~1-1.5s), measured
+from message arrival. It never delays a reply that already took longer (the model's
+own latency sails past the floor), so real turns lose nothing — it only keeps the
+occasional very-fast reply from snapping back unnaturally.
 
 Control yields **Chunk** objects (text + kind + meta) rather than bare strings, so
 the Interact layer can both render them and record them as observations with the
-right kind/metadata. Everything is recorded — including the filler ack (kind
-'filler') — so the stream is complete; later tiers can ignore fillers by kind.
+right kind/metadata.
+
+(The filler ack and the System-0 reflex are both deprecated — see faster.py — so a
+turn now yields exactly one `agent_msg` chunk.)
 """
 from __future__ import annotations
 
@@ -26,7 +28,6 @@ import time
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 
-from openkahn.think import faster
 from openkahn.think.brain import Brain
 
 # Minimum felt latency for a substantive reply, randomized so it isn't metronomic.
@@ -38,9 +39,9 @@ class Chunk:
     """One renderable piece of a reply, tagged for rendering AND for the log."""
 
     text: str
-    kind: str                                   # 'reflex' | 'agent_msg' | 'filler'
+    kind: str                                   # 'agent_msg' (reflex/filler deprecated)
     meta: dict = field(default_factory=dict)
-    record: bool = True                         # filler is ephemeral UX, not recorded
+    record: bool = True                         # set False for ephemeral, non-logged UX
 
 
 def _pace(since: float) -> None:
@@ -57,16 +58,14 @@ class Control:
 
     def respond(self, history: list[dict]) -> Iterator[Chunk]:
         """Answer the latest turn. `history` is the full conversation (chat-shape
-        dicts); the last entry is the current user message."""
-        arrived = time.monotonic()
+        dicts); the last entry is the current user message.
 
-        # System 0 (faster.reflex) is DEPRECATED — fast mode now handles trivial
-        # turns too, and does it briefly by persona. The table lives on in
-        # faster.py (we still use faster.filler for the latency-masking ack).
-        yield Chunk(faster.filler(), "filler")            # instant ack — recorded too
-        started = time.monotonic()
+        One pass, one chunk: fast mode (System 1). The System-0 reflex and the
+        filler ack are both deprecated (faster.py), so there's no pre-answer noise.
+        """
+        arrived = time.monotonic()
         answer = self._brain.think(history, mode="fast")      # System 1 — /no_think
-        latency_ms = int((time.monotonic() - started) * 1000)
+        latency_ms = int((time.monotonic() - arrived) * 1000)
         _pace(arrived)                                         # no-op when the model was slow
         yield Chunk(answer, "agent_msg", {
             "tier": "fast",

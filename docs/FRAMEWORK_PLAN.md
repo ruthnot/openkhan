@@ -244,9 +244,10 @@ Building slowly, smallest working slice first, adding one layer/plane at a time.
   "what is Apple?" → "who is the ceo?" → "Tim Cook" instead of a definition of "CEO". History
   is chat-completion shape (`{"role","content"}`); `Brain.think(history, mode)` prepends the
   persona. The CLI is now a thin transport driving one `Chat` per session. **System 0
-  (`faster.reflex`) is deprecated** — fast mode is terse by persona and handles trivial turns
-  itself with one consistent voice; `faster.py` is kept (its `filler()` ack is still used, and
-  the table is a re-enableable fallback), just no longer routed.
+  (`faster.reflex`) AND the filler ack are deprecated** — fast mode is terse by persona and
+  handles trivial turns itself with one consistent voice, and the "let me think…" filler was
+  just pre-answer noise, so a turn now yields exactly one `agent_msg` chunk. `faster.py` is
+  kept as a re-enableable fallback but is no longer imported anywhere.
 
 - **[next] Interact: Chainlit channel** over localhost + Tailscale, so the same Think layer
   is reachable from the laptop browser. (CLI stays as the dev channel.)
