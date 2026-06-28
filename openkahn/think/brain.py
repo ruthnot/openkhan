@@ -23,7 +23,7 @@ from typing import Literal, Protocol
 
 import ollama
 
-Mode = Literal["fast", "slow"]
+Mode = Literal["fast", "slow", "search"]
 
 
 def _today() -> str:
@@ -57,9 +57,19 @@ SLOW_SYSTEM = (
     "You are kahn, thinking carefully (System 2). Reason the problem through, then "
     "give a thorough, well-structured answer. " + CAN_SEARCH
 )
+# Search synthesis: still fast (thinking off, low latency) but NOT terse — it must
+# actually use the results. Allows lists and a fuller answer, unlike the chat persona.
+SEARCH_SYSTEM = (
+    "You are kahn, answering with the help of fresh web search results provided to "
+    "you. Give a complete, accurate answer grounded in those results — a few "
+    "sentences, or a short bulleted list when the user asks for a list or multiple "
+    "items. Name the most relevant source(s). If the results don't cover it, say so."
+)
 # Backstop output cap for fast replies: keeps System-1 brief even if it ignores the
 # persona, and bounds worst-case latency. Generous enough not to clip 1-3 sentences.
 FAST_NUM_PREDICT = 160
+# Search answers need room for a list + citations — much higher cap than chat.
+SEARCH_NUM_PREDICT = 600
 
 
 class Brain(Protocol):
@@ -100,12 +110,14 @@ class OllamaBrain:
 
     @staticmethod
     def _system(mode: Mode) -> str:
-        return _dated(FAST_SYSTEM if mode == "fast" else SLOW_SYSTEM)
+        persona = {"fast": FAST_SYSTEM, "slow": SLOW_SYSTEM, "search": SEARCH_SYSTEM}[mode]
+        return _dated(persona)
 
     def _options(self, mode: Mode) -> dict:
         options = {"temperature": self.temperature}
-        if mode == "fast":
-            options["num_predict"] = FAST_NUM_PREDICT  # brevity backstop (also caps latency)
+        caps = {"fast": FAST_NUM_PREDICT, "search": SEARCH_NUM_PREDICT}  # slow = uncapped
+        if mode in caps:
+            options["num_predict"] = caps[mode]
         return options
 
     def _messages(self, mode: Mode, history: list[dict]) -> list[dict]:

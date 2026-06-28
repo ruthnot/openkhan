@@ -252,8 +252,10 @@ Building slowly, smallest working slice first, adding one layer/plane at a time.
 - **[done] Tool use (web search) in chat + streaming.** First tool-augmented turn. Before
   answering, Control runs a **fast-mode router** (`brain.complete`, `ROUTER_SYSTEM` →
   "SEARCH: <query>" | "NO") to decide if the turn needs live info; if so it calls the injected
-  **Search** capability and folds results into a synthesis prompt answered in **fast mode**
-  (grounded, names a source). Search is *injected* into Control (a `Searcher` protocol), so
+  **Search** capability and folds results into a synthesis answered with a dedicated **search
+  profile** — thinking still off (low latency) but a fuller, list-friendly, citing persona
+  (`SEARCH_SYSTEM`, `num_predict=600`), not the terse chat persona — so search answers can be
+  a proper cited list while chitchat stays brief. Search is *injected* into Control (`Searcher`), so
   Think stays decoupled from Interact. Replies now **stream**: `Brain.stream()` yields token
   deltas (`ollama stream=True`); Control emits `kind="delta"` render-only chunks plus a final
   `agent_msg` (full text, recorded + stored in history); the CLI prints deltas live. A

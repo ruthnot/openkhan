@@ -104,15 +104,17 @@ class Control:
             yield Chunk(f"🔍 searching the web: {query}", "search", {"query": query})
             results = self._search.search(query)
             messages = [*history, {"role": "user", "content": self._results_context(query, results)}]
-            meta = {"tier": "fast", "mode": "fast", "tool": "search",
+            mode = "search"   # fuller, list-friendly synthesis (still thinking off)
+            meta = {"tier": "fast", "mode": "search", "tool": "search",
                     "query": query, "results": len(results)}
         else:
             messages = history
+            mode = "fast"
             meta = {"tier": "fast", "mode": "fast"}
 
         parts: list[str] = []
         first = True
-        for delta in self._brain.stream(messages, mode="fast"):
+        for delta in self._brain.stream(messages, mode=mode):
             if first:
                 _pace(arrived)        # hold the *first* token to the felt-latency floor
                 first = False
