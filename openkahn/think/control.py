@@ -50,6 +50,8 @@ ROUTER_SYSTEM = (
     "or opinions do NOT need search.\n"
     "If a search is needed, reply EXACTLY: SEARCH: <a concise web query>\n"
     "Otherwise reply EXACTLY: NO\n"
+    "Keep the query close to the user's wording; do NOT add a year unless the user "
+    "mentioned one (today's date is given above if you need it).\n"
     "Reply with nothing else."
 )
 

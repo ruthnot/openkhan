@@ -18,11 +18,23 @@ self-consistency / tool-verify) comes later.
 from __future__ import annotations
 
 from collections.abc import Iterator
+from datetime import datetime
 from typing import Literal, Protocol
 
 import ollama
 
 Mode = Literal["fast", "slow"]
+
+
+def _today() -> str:
+    """Current local date, computed fresh per call (the daemon is long-running)."""
+    return datetime.now().strftime("%A, %d %B %Y")
+
+
+def _dated(system: str) -> str:
+    """Prepend today's date so the model isn't stuck at its training cutoff —
+    fixes wrong-year answers and stale years in search queries."""
+    return f"Today's date is {_today()}.\n\n{system}"
 
 # Shared capability note so the model knows what it can actually do. Search is run
 # FOR the model by the system (Control's router), not called by the model — but from
@@ -88,7 +100,7 @@ class OllamaBrain:
 
     @staticmethod
     def _system(mode: Mode) -> str:
-        return FAST_SYSTEM if mode == "fast" else SLOW_SYSTEM
+        return _dated(FAST_SYSTEM if mode == "fast" else SLOW_SYSTEM)
 
     def _options(self, mode: Mode) -> dict:
         options = {"temperature": self.temperature}
@@ -129,7 +141,7 @@ class OllamaBrain:
             options["num_predict"] = max_tokens
         resp = self._client.chat(
             model=self.model,
-            messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
+            messages=[{"role": "system", "content": _dated(system)}, {"role": "user", "content": user}],
             think=False,
             options=options,
         )
