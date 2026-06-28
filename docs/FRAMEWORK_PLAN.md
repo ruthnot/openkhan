@@ -104,6 +104,15 @@ Telegram ──► Transport ──► Task Queue (DB-backed, state machine)
    Everything observable via FastAPI dashboard (localhost, reachable over Tailscale)
 ```
 
+**Two levels of control (one idea — Think's "orchestrator" — at two scopes).** "Control" is
+Think's word; it is *not* a separate layer or plane. It shows up twice:
+- **Turn-level** — `think/control.py` routes a *single live turn* (reflex / fast / slow).
+  Online, latency-bound. *The router is a control decision* → this is **Think**.
+- **Task-level** — the **Agent Loop** (`runtime/worker.py`) drains the DB-backed **task queue**
+  and dispatches each unit of background work, *invoking* Think per task. This is **runtime
+  plumbing that hosts the process** — not a layer, not a plane (planes only *watch* or *gate*).
+  The always-live `kahnd` daemon **is** this loop; a chat session just connects to it.
+
 **Design principles**
 - **Brain = an interface, not a model.** `Brain.think(task, mode, context) -> {answer, confidence, trace}`. Backends are swappable by config (`system1`, `system2`, `embeddings` tiers).
 - **System 2 = invocation strategy, not a bigger model.** Same 7B, more test-time compute (decompose → ground → self-consistency vote → tool-verify → confidence). Speed-not-a-problem is what makes this viable.
@@ -149,10 +158,14 @@ openkahn/
     reflect/                 # LAYER 4 — offline consolidation (reflect + promote) (later)
     observability/           # plane — watch (dashboard) (later)
     security/                # plane — gate (manifests, sandbox, confirmation) (later)
-    runtime/                 # plumbing — wires layers, hosts the process
-      app.py                 #   [v0] `kahn` entrypoint: build brain → inject into CLI
-      config.py              #   [v0] config loader (defaults + config.yaml)
-    db/                      #   (later) schema / migrations
+    runtime/                 # plumbing — wires layers, hosts the process + the agent loop
+      app.py                 #   `kahn` entrypoint: dispatch subcommands
+      config.py              #   config loader (defaults + config.yaml)
+      daemon.py              #   kahnd lifecycle: start/stop/restart/status (detached process)
+      queue.py               #   task-queue access (the DB-backed work queue) + watchdog
+      worker.py              #   the agent loop: drain tasks, dispatch by kind, record outcomes
+    db/                      #   schema bootstrap (observations, tasks)
+    __main__.py              #   `python -m openkahn` → re-enters app.main (spawns the daemon)
   tests/
 ```
 
@@ -162,7 +175,7 @@ openkahn/
 - `messages` — raw transcript rows (long-term raw memory)
 - `facts` — durable atomic memories (text, embedding, source episode, confidence)
 - `skills` — name, description, body(md), script_path, capabilities(json), status(candidate|trusted), success/fail counts, embedding
-- `tasks` — queue rows: state(queued|running|done|failed|timeout), heartbeat_ts (watchdog)
+- `tasks` — work queue drained by the kahnd agent loop: kind, params(json), requester(json: channel/peer), state(queued|running|done|failed|timeout), result/error, created/started/finished. *(planned: heartbeat_ts + attempts for the stage-2 watchdog)*
 - `summaries` — short-term rolling summaries per session
 - vec/FTS virtual tables over `facts`, `messages`, `skills`
 
@@ -197,6 +210,20 @@ Building slowly, smallest working slice first, adding one layer/plane at a time.
   over the observation stream: `kahn log` shows the latest N (default `--limit 30`),
   oldest-first, with day headers, local time, you→/kahn← gutter, and tier/latency tags.
   Never touches the model — first piece of the "what is it doing" answer.
+
+- **[done] Always-live daemon — `kahnd` + the task queue.** The agent now runs as a background
+  daemon draining a DB-backed task queue, so *the agent is always live and a chat is just one
+  session that connects*: `kahn start` (daemon) · `kahn chat` (session — exit anytime, daemon
+  stays up) · `kahn stop` (the only thing that ends the agent) · `restart`/`status` ·
+  `kahn submit` (enqueue). Runtime plumbing, **not a layer/plane**: `runtime/queue.py` (the
+  `tasks` table, queued→running→done/failed), `runtime/worker.py` (the agent loop — claim,
+  dispatch by `kind`, record outcomes to the observation stream under channel `kahnd`),
+  `runtime/daemon.py` (detached process + PID file, graceful SIGTERM stop). An `echo` handler
+  proves the queue→loop→memory pipe. **Watchdog (stage 1): reclaim-on-startup** — kahnd
+  requeues any task left `running` by a crashed worker (safe: single worker, so a `running` row
+  at boot is always an orphan). chat + daemon are separate processes sharing one SQLite DB
+  (WAL + busy_timeout). *Stage-2 watchdog (heartbeat + per-task timeout for live hangs) is
+  Phase 6.*
 
 - **[next] Interact: Chainlit channel** over localhost + Tailscale, so the same Think layer
   is reachable from the laptop browser. (CLI stays as the dev channel.)

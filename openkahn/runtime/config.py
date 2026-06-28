@@ -22,7 +22,7 @@ DEFAULTS: dict = {
         "db": "data/openkahn.db",
     },
     "control": {
-        "poll_interval_seconds": 1.0,   # how often the worker checks the job queue
+        "poll_interval_seconds": 1.0,   # how often the agent loop checks the task queue
         "pid_file": "data/kahnd.pid",   # daemon liveness handle (start/stop/restart)
         "log_file": "data/kahnd.log",   # daemon stdout/stderr sink
     },

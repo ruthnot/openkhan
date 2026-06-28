@@ -1,18 +1,18 @@
 """RUNTIME — the kahnd daemon lifecycle.
 
 This is the "always-live agent" made real. `kahn start` launches kahnd as a
-detached background process that drains the jobs queue; it keeps running after you
+detached background process that drains the task queue; it keeps running after you
 close your chat session and only stops on `kahn stop`. The model:
 
     kahn start    → spawn a detached child running `_run()`, write its PID
     kahn stop     → SIGTERM the PID, wait for it to exit, clear the PID file
     kahn restart  → stop, then start
-    kahn status   → is it alive? how many jobs are queued?
+    kahn status   → is it alive? how many tasks are queued?
 
 We keep it deliberately simple: one detached child process (not a double-fork
 init-style daemon), a PID file for liveness, and the child's stdout/stderr sent to
 a log file. The child installs SIGTERM/SIGINT handlers that set a stop Event, so
-the worker finishes its current job and exits cleanly.
+the loop finishes its current task and exits cleanly.
 """
 from __future__ import annotations
 
@@ -24,11 +24,11 @@ import threading
 import time
 from pathlib import Path
 
-from openkahn.control.jobs import Jobs
-from openkahn.control.worker import Worker
 from openkahn.db.connection import connect
 from openkahn.memory.observations import Observations
 from openkahn.runtime.config import Config
+from openkahn.runtime.queue import Tasks
+from openkahn.runtime.worker import Worker
 
 
 # --- PID file helpers --------------------------------------------------------
@@ -113,21 +113,34 @@ def restart(cfg: Config, config_path: str) -> None:
 def status(cfg: Config) -> None:
     pid = status_pid(cfg.control.pid_file)
     conn = connect(cfg.memory.db)
-    queued = Jobs(conn).pending()
+    queued = Tasks(conn).pending()
     if pid is None:
-        print(f"kahnd: stopped  ·  {queued} job(s) queued")
+        print(f"kahnd: stopped  ·  {queued} task(s) queued")
     else:
-        print(f"kahnd: running (pid {pid})  ·  {queued} job(s) queued")
+        print(f"kahnd: running (pid {pid})  ·  {queued} task(s) queued")
 
 
 # --- the daemon body (runs inside the detached child) ------------------------
 
 def run(cfg: Config) -> None:
-    """The foreground loop of the detached child: build the worker and drain jobs."""
+    """The foreground loop of the detached child: build the loop and drain tasks."""
     conn = connect(cfg.memory.db)
+    tasks = Tasks(conn)
+    observations = Observations(conn)
+
+    # Watchdog (stage 1): a `running` task at boot can only be an orphan from a
+    # previous crash (single worker), so requeue it before the loop starts.
+    reclaimed = tasks.reclaim_stale()
+    if reclaimed:
+        observations.record(
+            kind="daemon", actor="system",
+            content=f"reclaimed {reclaimed} orphaned task(s) on startup",
+            session_id="kahnd", channel="kahnd",
+        )
+
     worker = Worker(
-        jobs=Jobs(conn),
-        observations=Observations(conn),
+        tasks=tasks,
+        observations=observations,
         poll_interval=cfg.control.poll_interval_seconds,
     )
 

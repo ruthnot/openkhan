@@ -2,7 +2,7 @@
 
 One database file holds every layer's tables as they come online:
   - `observations` — Memory tier 1, the raw append-only memory stream.
-  - `jobs`         — Control plane, the work queue the kahnd daemon drains.
+  - `tasks`        — the work queue the kahnd agent loop drains (runtime plumbing).
 
 The schema uses `IF NOT EXISTS`, so opening an existing DB is a no-op and future
 tiers just add their own `CREATE TABLE` lines here. The DB has two writers (the
@@ -33,19 +33,19 @@ CREATE INDEX IF NOT EXISTS idx_obs_ts      ON observations(ts);
 CREATE INDEX IF NOT EXISTS idx_obs_day     ON observations(day);
 CREATE INDEX IF NOT EXISTS idx_obs_session ON observations(session_id);
 
-CREATE TABLE IF NOT EXISTS jobs (
+CREATE TABLE IF NOT EXISTS tasks (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,  -- queue position = order enqueued
   kind        TEXT    NOT NULL,                   -- 'echo' (later 'research', ...)
   params      TEXT,                               -- JSON: kind-specific inputs
   requester   TEXT,                               -- JSON: {channel, peer} — where to deliver
-  state       TEXT    NOT NULL,                   -- 'queued'|'running'|'done'|'failed'
+  state       TEXT    NOT NULL,                   -- 'queued'|'running'|'done'|'failed'|'timeout'
   result      TEXT,                               -- JSON: handler output (when done)
   error       TEXT,                               -- failure message (when failed)
   created_at  TEXT    NOT NULL,                   -- UTC ISO8601 enqueued
-  started_at  TEXT,                               -- UTC ISO8601 claimed by worker
+  started_at  TEXT,                               -- UTC ISO8601 claimed by the agent loop
   finished_at TEXT                                -- UTC ISO8601 done/failed
 );
-CREATE INDEX IF NOT EXISTS idx_jobs_state ON jobs(state, id);
+CREATE INDEX IF NOT EXISTS idx_tasks_state ON tasks(state, id);
 """
 
 
