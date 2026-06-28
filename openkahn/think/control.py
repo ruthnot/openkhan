@@ -44,14 +44,16 @@ FELT_FLOOR_SECONDS = (1.0, 1.5)
 # The router: a tiny fast-mode decision on whether this turn needs a web search.
 # Plain-text verdict (easier for a small model than JSON): "SEARCH: <query>" or "NO".
 ROUTER_SYSTEM = (
-    "You are a router. Decide if answering the user's message needs a LIVE web "
-    "search — current events, news, prices, schedules, recent releases, or a "
-    "specific fact you are not confident about. General knowledge, chit-chat, math, "
-    "or opinions do NOT need search.\n"
-    "If a search is needed, reply EXACTLY: SEARCH: <a concise web query>\n"
+    "You are a router for a chat assistant. You are given the recent conversation. "
+    "Decide whether answering the LAST user message needs a LIVE web search — current "
+    "events, news, prices, schedules, recent releases, or a specific fact the assistant "
+    "may not know. General knowledge, chit-chat, math, or opinions do NOT need search.\n"
+    "If a search is needed, reply EXACTLY: SEARCH: <a concise, self-contained web query>\n"
     "Otherwise reply EXACTLY: NO\n"
-    "Keep the query close to the user's wording; do NOT add a year unless the user "
-    "mentioned one (today's date is given above if you need it).\n"
+    "Make the query STAND ALONE: resolve references like 'the war', 'it', 'he', 'that' "
+    "from earlier turns (e.g. if the war under discussion is the Iran war, write 'Iran "
+    "war', not 'the war'). Keep it close to the user's wording; do NOT add a year unless "
+    "the user mentioned one (today's date is given above if you need it).\n"
     "Reply with nothing else."
 )
 
@@ -125,18 +127,32 @@ class Control:
     # --- tool routing --------------------------------------------------------
 
     def _route_search(self, history: list[dict]) -> str | None:
-        """Ask fast mode whether the latest turn needs a web search. Returns the
-        query to run, or None (no search capability, or not needed)."""
+        """Ask fast mode whether the latest turn needs a web search. Returns a
+        self-contained query (references resolved from context), or None.
+
+        The router sees the recent conversation — not just the last line — so a
+        follow-up like "events of the war" becomes "Iran war events", not a query
+        that lost its subject."""
         if self._search is None:
             return None
-        last = history[-1]["content"]
-        verdict = self._brain.complete(ROUTER_SYSTEM, last, max_tokens=40)
+        verdict = self._brain.complete(ROUTER_SYSTEM, self._render_recent(history), max_tokens=60)
         marker = "SEARCH:"
         idx = verdict.upper().find(marker)
         if idx == -1:
             return None
         query = verdict[idx + len(marker):].splitlines()[0].strip().strip('"').strip()
         return query or None
+
+    @staticmethod
+    def _render_recent(history: list[dict], max_turns: int = 6, max_len: int = 200) -> str:
+        """Compact transcript of the last few turns for the router to reason over."""
+        lines = []
+        for m in history[-max_turns:]:
+            content = m["content"].replace("\n", " ")
+            if len(content) > max_len:
+                content = content[: max_len - 1] + "…"
+            lines.append(f"{m['role']}: {content}")
+        return "Conversation so far:\n" + "\n".join(lines)
 
     @staticmethod
     def _results_context(query: str, results: list) -> str:
