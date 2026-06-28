@@ -59,10 +59,12 @@ planes. **Skills are not a layer — they are procedural memory.**
 ```
 
 **Layers**
-- **Interact** — the world I/O boundary, bidirectional. Sub-modes (built later): **Converse**
-  (chat I/O — Telegram now, email later), **Sense** (read-only pulls — web/API/RSS),
-  **Effect** (side-effecting actions — book/send/pay; confirmation-gated). *Converse is one
-  way to act, not the whole layer.*
+- **Interact** — the world I/O boundary, bidirectional. Functionalities: **Converse**
+  (chat I/O — CLI now, Telegram/email later), **Search** (read-only web/API/RSS pulls —
+  `interact/search.py`; "Sense" was the abstract name, but we name the concrete
+  functionality), **Effect** (side-effecting actions — book/send/pay; confirmation-gated).
+  *Converse is one way to act, not the whole layer.* Read-only functionalities (Search) need
+  only a `network` capability; only Effects get confirmation gates.
 - **Think** — control/orchestrator **and** fast/slow reasoning about the **current** turn.
   Online, latency-bound. Houses System-1/System-2 routing (the router is a control decision).
 - **Memory** — the shared substrate the stack rests on: **working** (live turn), **episodic**
@@ -146,9 +148,9 @@ openkahn/
   config.example.yaml        # copy to config.yaml to override defaults
   openkahn/
     interact/                # LAYER 1 — world I/O boundary
-      cli.py                 #   [v0] dev CLI channel (a converse sub-mode)
+      cli.py                 #   dev CLI channel (a converse functionality)
+      search.py              #   read-only web search (DuckDuckGo via ddgs; backend-swappable)
       converse/              #   (later) Telegram long-poll, email
-      sense/                 #   (later) read-only web/API/RSS pulls
       effect/                #   (later) side-effecting actions (gated)
     think/                   # LAYER 2 — control + reasoning
       brain.py               #   [v0] Brain interface + OllamaBrain (fast-think)
@@ -224,6 +226,15 @@ Building slowly, smallest working slice first, adding one layer/plane at a time.
   at boot is always an orphan). chat + daemon are separate processes sharing one SQLite DB
   (WAL + busy_timeout). *Stage-2 watchdog (heartbeat + per-task timeout for live hangs) is
   Phase 6.*
+
+- **[done] Interact: Search — the agent reads the world.** `interact/search.py`: read-only
+  web search, DuckDuckGo via `ddgs` (no API key), backend-swappable like `Brain`. Returns
+  `SearchResult(title, url, snippet)`. Wired as a `search` task kind (handler built in
+  `daemon.run()`, closing over a `Search` instance), so the live daemon does real web egress
+  end-to-end: `kahn submit --kind search --text "…"` → results stored on the task. **First
+  external egress** (read-only → `network` capability only; Security plane will enforce the
+  manifest later). Next: `fetch(url)` for page bodies, then a `data/research` artifact store,
+  then the ResearchSkill that composes Search + Think(slow) + artifacts.
 
 - **[next] Interact: Chainlit channel** over localhost + Tailscale, so the same Think layer
   is reachable from the laptop browser. (CLI stays as the dev channel.)

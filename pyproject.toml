@@ -5,6 +5,7 @@ description = "A personal, self-improving agent framework that runs fully local.
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "ddgs>=9.14.4",
     "ollama>=0.4.0",   # local LLM client (Think layer)
     "pyyaml>=6.0",     # config loading
 ]

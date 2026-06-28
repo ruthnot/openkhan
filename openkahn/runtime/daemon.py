@@ -25,10 +25,11 @@ import time
 from pathlib import Path
 
 from openkahn.db.connection import connect
+from openkahn.interact.search import Search
 from openkahn.memory.observations import Observations
 from openkahn.runtime.config import Config
-from openkahn.runtime.queue import Tasks
-from openkahn.runtime.worker import Worker
+from openkahn.runtime.queue import Task, Tasks
+from openkahn.runtime.worker import DEFAULT_HANDLERS, Worker
 
 
 # --- PID file helpers --------------------------------------------------------
@@ -138,9 +139,21 @@ def run(cfg: Config) -> None:
             session_id="kahnd", channel="kahnd",
         )
 
+    # Handler registry: the generic stateless defaults (echo) plus handlers that
+    # need wiring. `search` closes over an Interact Search (read-only web egress).
+    search = Search()
+
+    def search_handler(task: Task) -> dict:
+        query = task.params.get("text", "")
+        results = search.search(query)
+        return {"query": query, "count": len(results), "results": [vars(r) for r in results]}
+
+    handlers = {**DEFAULT_HANDLERS, "search": search_handler}
+
     worker = Worker(
         tasks=tasks,
         observations=observations,
+        handlers=handlers,
         poll_interval=cfg.control.poll_interval_seconds,
     )
 
