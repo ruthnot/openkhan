@@ -1,5 +1,12 @@
 """THINK layer — System 0, the "faster" reflex tier.
 
+DEPRECATED (kept, not deleted): `reflex()` is no longer routed by control.py. Fast
+mode (System 1) is now terse by persona, so it handles greetings/acks itself with
+acceptable latency, and one consistent voice beats a canned table. This module
+stays because `filler()` is still used (the latency-masking ack before a fast turn),
+and the reflex table is a useful fallback to re-enable if we ever want sub-second,
+LLM-free trivial replies.
+
 The cheapest tier: no LLM, no ML, just string matching. If the *whole* message is
 a recognized trivial turn, we return a canned reply in microseconds. Everything
 else returns None and falls through to real fast-think (System 1).

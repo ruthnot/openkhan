@@ -3,8 +3,10 @@
 Decides *how* to answer each turn (tier) and produces the answer as a stream of
 chunks. Tiers today:
 
-  faster (System 0)  faster.reflex()  — instant canned reply, no LLM
-  fast   (System 1)  brain.think()    — one /no_think single pass
+  faster (System 0)  faster.reflex()  — DEPRECATED: canned table reply, no LLM.
+                     Kept in faster.py but no longer routed; fast mode (now terse
+                     by persona) handles trivial turns too.
+  fast   (System 1)  brain.think()    — one /no_think single pass (the default)
   slow   (System 2)  brain.think()    — thinking on; implemented, not routed yet
 
 Pacing: every *substantive* reply is held to a minimum felt-latency floor (~1-1.5s),
@@ -53,18 +55,17 @@ class Control:
     def __init__(self, brain: Brain) -> None:
         self._brain = brain
 
-    def respond(self, message: str) -> Iterator[Chunk]:
+    def respond(self, history: list[dict]) -> Iterator[Chunk]:
+        """Answer the latest turn. `history` is the full conversation (chat-shape
+        dicts); the last entry is the current user message."""
         arrived = time.monotonic()
 
-        canned = faster.reflex(message)
-        if canned is not None:
-            _pace(arrived)                              # pad instant reflex up to the floor
-            yield Chunk(canned, "reflex", {"tier": "faster"})
-            return
-
-        yield Chunk(faster.filler(), "filler")            # instant ack — now recorded too
+        # System 0 (faster.reflex) is DEPRECATED — fast mode now handles trivial
+        # turns too, and does it briefly by persona. The table lives on in
+        # faster.py (we still use faster.filler for the latency-masking ack).
+        yield Chunk(faster.filler(), "filler")            # instant ack — recorded too
         started = time.monotonic()
-        answer = self._brain.think(message, mode="fast")      # System 1 — /no_think
+        answer = self._brain.think(history, mode="fast")      # System 1 — /no_think
         latency_ms = int((time.monotonic() - started) * 1000)
         _pace(arrived)                                         # no-op when the model was slow
         yield Chunk(answer, "agent_msg", {

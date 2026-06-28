@@ -41,9 +41,15 @@ FAST_NUM_PREDICT = 160
 
 
 class Brain(Protocol):
-    """The Think layer's contract: a message + mode in, a reply out."""
+    """The Think layer's contract: a conversation + mode in, a reply out.
 
-    def think(self, message: str, mode: Mode = "fast") -> str: ...
+    `history` is the running conversation in chat-completion shape — a list of
+    {"role": "user"|"assistant", "content": ...} dicts, oldest first, the last
+    entry being the current user turn. The model is stateless, so the *whole*
+    history is sent every call; the Brain prepends the per-mode system persona.
+    """
+
+    def think(self, history: list[dict], mode: Mode = "fast") -> str: ...
 
 
 class OllamaBrain:
@@ -59,17 +65,15 @@ class OllamaBrain:
         self.temperature = temperature
         self._client = ollama.Client(host=host)
 
-    def think(self, message: str, mode: Mode = "fast") -> str:
+    def think(self, history: list[dict], mode: Mode = "fast") -> str:
         system = FAST_SYSTEM if mode == "fast" else SLOW_SYSTEM
         options = {"temperature": self.temperature}
         if mode == "fast":
             options["num_predict"] = FAST_NUM_PREDICT  # brevity backstop (also caps latency)
         resp = self._client.chat(
             model=self.model,
-            messages=[
-                {"role": "system", "content": system},
-                {"role": "user", "content": message},
-            ],
+            # persona first, then the full conversation so far (model is stateless)
+            messages=[{"role": "system", "content": system}, *history],
             think=(mode == "slow"),  # fast = thinking off (System 1); slow = on (System 2)
             options=options,
         )

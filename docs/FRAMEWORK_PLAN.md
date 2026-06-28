@@ -59,8 +59,9 @@ planes. **Skills are not a layer — they are procedural memory.**
 ```
 
 **Layers**
-- **Interact** — the world I/O boundary, bidirectional. Functionalities: **Converse**
-  (chat I/O — CLI now, Telegram/email later), **Search** (read-only web/API/RSS pulls —
+- **Interact** — the world I/O boundary, bidirectional. Functionalities: **Chat** (the
+  conversation — CLI now, Telegram/email later; owns the running history and feeds the *full*
+  context to Think each turn, since the model is stateless), **Search** (read-only web/API/RSS pulls —
   `interact/search.py`; "Sense" was the abstract name, but we name the concrete
   functionality), **Effect** (side-effecting actions — book/send/pay; confirmation-gated).
   *Converse is one way to act, not the whole layer.* Read-only functionalities (Search) need
@@ -148,7 +149,8 @@ openkahn/
   config.example.yaml        # copy to config.yaml to override defaults
   openkahn/
     interact/                # LAYER 1 — world I/O boundary
-      cli.py                 #   dev CLI channel (a converse functionality)
+      cli.py                 #   dev CLI channel — thin transport driving Chat
+      chat.py                #   conversation functionality: keeps history, feeds full context to Think
       search.py              #   read-only web search (DuckDuckGo via ddgs; backend-swappable)
       converse/              #   (later) Telegram long-poll, email
       effect/                #   (later) side-effecting actions (gated)
@@ -235,6 +237,16 @@ Building slowly, smallest working slice first, adding one layer/plane at a time.
   external egress** (read-only → `network` capability only; Security plane will enforce the
   manifest later). Next: `fetch(url)` for page bodies, then a `data/research` artifact store,
   then the ResearchSkill that composes Search + Think(slow) + artifacts.
+
+- **[done] Chat context + System-0 deprecation.** Chat is now an Interact functionality
+  (`interact/chat.py`) parallel to Search: it owns the conversation history and feeds the
+  *full* context to Think every turn (the model is stateless), so follow-ups resolve —
+  "what is Apple?" → "who is the ceo?" → "Tim Cook" instead of a definition of "CEO". History
+  is chat-completion shape (`{"role","content"}`); `Brain.think(history, mode)` prepends the
+  persona. The CLI is now a thin transport driving one `Chat` per session. **System 0
+  (`faster.reflex`) is deprecated** — fast mode is terse by persona and handles trivial turns
+  itself with one consistent voice; `faster.py` is kept (its `filler()` ack is still used, and
+  the table is a re-enableable fallback), just no longer routed.
 
 - **[next] Interact: Chainlit channel** over localhost + Tailscale, so the same Think layer
   is reachable from the laptop browser. (CLI stays as the dev channel.)
