@@ -7,7 +7,7 @@ chunks. Tiers today:
   fast   (System 1)  brain.think()    — one /no_think single pass
   slow   (System 2)  brain.think()    — thinking on; implemented, not routed yet
 
-Pacing: every *substantive* reply is held to a minimum felt-latency floor (~0.5-1s),
+Pacing: every *substantive* reply is held to a minimum felt-latency floor (~1-1.5s),
 measured from message arrival. This pads instant reflexes up to a human beat but
 never delays a reply that already took longer (the model's own latency sails past
 the floor), so real turns lose nothing. The filler ack stays instant on purpose.
@@ -28,7 +28,7 @@ from openkahn.think import faster
 from openkahn.think.brain import Brain
 
 # Minimum felt latency for a substantive reply, randomized so it isn't metronomic.
-FELT_FLOOR_SECONDS = (0.5, 1.0)
+FELT_FLOOR_SECONDS = (1.0, 1.5)
 
 
 @dataclass

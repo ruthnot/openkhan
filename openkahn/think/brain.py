@@ -1,14 +1,19 @@
 """THINK layer — reasoning.
 
 The Brain is an *interface*, not a model — backends are swappable by config. It
-runs in one of two modes:
+runs in one of two modes, and the mode shapes *three* things, not just one:
 
-  fast (System 1)  — qwen3 with thinking OFF: one quick single pass.
-  slow (System 2)  — qwen3 with thinking ON: it reasons before answering.
+  fast (System 1)  — thinking OFF + a terse persona + a short output cap: a quick,
+                     intuitive, 1-3 sentence reflex. Brevity is the point — a short
+                     answer is also a *fast* answer (fewer tokens = less latency).
+  slow (System 2)  — thinking ON + a thorough persona + no cap: it reasons first,
+                     then gives a full structured answer.
 
-The router (control.py) currently only ever asks for `fast`. `slow` works here but
-nothing routes to it yet — the full System 2 scaffolding (decompose / self-
-consistency / tool-verify) comes later; this is just qwen3's native thinking toggle.
+Each mode carries its own **system prompt** (the persona) and **options**
+(`num_predict` cap), so the fast/slow split is real in behaviour, not just a
+`think=` toggle. The router (control.py) currently only asks for `fast`; `slow`
+works here but isn't routed yet — the full System 2 scaffolding (decompose /
+self-consistency / tool-verify) comes later.
 """
 from __future__ import annotations
 
@@ -18,6 +23,22 @@ import ollama
 
 Mode = Literal["fast", "slow"]
 
+# System-1: fast, intuitive, brief. Lead with the answer; no ceremony.
+FAST_SYSTEM = (
+    "You are kahn, replying on reflex (System 1): fast, intuitive, and brief. "
+    "Answer in 1-3 short sentences. Lead with the answer — no preamble, no lists, "
+    "no headings. If the question truly needs depth, give the gist in one line and "
+    "offer to expand."
+)
+# System-2: deliberate, thorough, structured.
+SLOW_SYSTEM = (
+    "You are kahn, thinking carefully (System 2). Reason the problem through, then "
+    "give a thorough, well-structured answer."
+)
+# Backstop output cap for fast replies: keeps System-1 brief even if it ignores the
+# persona, and bounds worst-case latency. Generous enough not to clip 1-3 sentences.
+FAST_NUM_PREDICT = 160
+
 
 class Brain(Protocol):
     """The Think layer's contract: a message + mode in, a reply out."""
@@ -26,7 +47,7 @@ class Brain(Protocol):
 
 
 class OllamaBrain:
-    """Local ollama backend. `mode` toggles qwen3's thinking on/off."""
+    """Local ollama backend. `mode` sets thinking, persona, and output cap together."""
 
     def __init__(
         self,
@@ -39,10 +60,17 @@ class OllamaBrain:
         self._client = ollama.Client(host=host)
 
     def think(self, message: str, mode: Mode = "fast") -> str:
+        system = FAST_SYSTEM if mode == "fast" else SLOW_SYSTEM
+        options = {"temperature": self.temperature}
+        if mode == "fast":
+            options["num_predict"] = FAST_NUM_PREDICT  # brevity backstop (also caps latency)
         resp = self._client.chat(
             model=self.model,
-            messages=[{"role": "user", "content": message}],
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": message},
+            ],
             think=(mode == "slow"),  # fast = thinking off (System 1); slow = on (System 2)
-            options={"temperature": self.temperature},
+            options=options,
         )
         return resp.message.content
